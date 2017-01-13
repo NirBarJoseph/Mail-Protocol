@@ -91,7 +91,7 @@ int main(int argc, char* args[]){
 		/*---- Accept new user ----*/
 		printf("before connection!\n");
 		newSocket = accept(welcome_socket, (struct sockaddr *)&clientAddr, &addr_size);
-		FD_SET(newSocket, active_fds);
+		FD_SET(newSocket, &active_fds);
 		if(newSocket > max_fd){
 			max_fd = newSocket;
 		}
@@ -124,7 +124,7 @@ int main(int argc, char* args[]){
 			/*--- start receive loop ---*/
 			read_fds = active_fds;
 
-	        num_read_ready = Select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+	        num_read_ready = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
 
 	        i = 0;
 	        while(num_read_ready){
@@ -162,7 +162,7 @@ int main(int argc, char* args[]){
     					/* if log in request confirmed we want to issue a "connected" msg */
     					online_users[found] = waiting_connection[i];
     					waiting_connection[i] = -1;
-    					ALLOC_And_COPY(users_output[found], connected_msg);
+    					ALLOC_AND_COPY(users_output[found], connected_msg);
     					num_of_connected_clients++;
     					num_waiting_conn--;
     				}
@@ -172,7 +172,7 @@ int main(int argc, char* args[]){
 
 	        	} else if(FD_ISSET(online_users[i], &read_fds)){
     				/* get client command and create output for them */
-					switch (recv_with_size(online_users[i], users_output[i])) {
+					switch (recv_with_size(online_users[i], &users_output[i])) {
 					case 0:
 						/* caused by SIGTERM in client */
 						/* act as if QUIT command issued */
@@ -186,7 +186,7 @@ int main(int argc, char* args[]){
 						break;
 					}
 
-					server_state_machine(server_buff);
+					server_state_machine(server_buff, i);
 					NULLIFY(server_buff);
 	        	}
 
@@ -200,9 +200,12 @@ int main(int argc, char* args[]){
 
 	        // TODO EMAOHI
 			write_fds = active_fds;
-	        nready = Select(maxfd+1, NULL, &write_fds, NULL, NULL);
+			num_write_ready = select(max_fd+1, NULL, &write_fds, NULL, NULL);
+			if(!num_write_ready){
+				continue;
+			}
+
 	        /* Service all the sockets with output pending. */
-	        int i;
 	        for (i = 0; i < NUM_OF_CLIENTS; ++i)
 	          if (FD_ISSET (online_users[i], &write_fds))
 	            {
@@ -465,16 +468,16 @@ void parse_show_inbox(uint8 idx){
 	curr_buffer_len += BUFFER_SIZE;
 
 	//iterate over the inbox
-	while(i < users[idx]->inbox_size){
+	while(i < users[idx].inbox_size){
 
 		//if the message is deleted (all fields are zeroed (no mail with zero recipients)) continue
-		if(!users[idx]->inbox[i].recipient_number){
+		if(!users[idx].inbox[i].recipient_number){
 			i++;
 			continue;
 		}
 		//create a string for one msg
 		memset(tmp_str, 0 ,max_tmp_len);
-		parse_mail_show_inbox(users[idx]->inbox[i], tmp_str, i);
+		parse_mail_show_inbox(users[idx].inbox[i], tmp_str, i);
 		//if the the function string buffer won't be enough - reallocate it
 		if(curr_buffer_len < curr_output_len + strlen(tmp_str)){
 			curr_buffer_len += BUFFER_SIZE;
@@ -510,17 +513,17 @@ void parse_get_mail(uint8 idx, uint8* mail_num){
 	uint8	i;
 	(*mail_num)--;
 
-	if(!users[idx]){
-		ALLOC_STRING_COPY(users_output[idx],"No Logged User\n");
-		strcpy(users_output[idx], "No Logged User\n");
+	if(online_users[idx] < 0){
+		ALLOC_STRING_COPY(users_output[idx],"This user in not logged\n");
+		strcpy(users_output[idx], "This user in not logged\n");
 		return;
 		// if the mail number requested is bigger then the size of the inbox then it is not existing
-	} else if (users[idx]->inbox_size <= *mail_num){
+	} else if (users[idx].inbox_size <= *mail_num){
 		ALLOC_STRING_COPY(users_output[idx],"No such mail\n");
 		strcpy(users_output[idx], "No such mail\n");
 		return;
 		//if the message is deleted (all fields are zeroed (no mail with zero recipients)) continue
-	} else if (!users[idx]->inbox[*mail_num].recipient_number){
+	} else if (!users[idx].inbox[*mail_num].recipient_number){
 		ALLOC_STRING_COPY(users_output[idx],"This mail is deleted\n");
 		strcpy(users_output[idx], "This mail is deleted\n");
 		return;
@@ -530,7 +533,7 @@ void parse_get_mail(uint8 idx, uint8* mail_num){
 	CHECK_ALLOC(users_output[idx]);
 	memset(users_output[idx], 0, MAX_COMPOSE_MSG);
 
-	mail = &users[idx]->inbox[*mail_num];
+	mail = &users[idx].inbox[*mail_num];
 
 	strcat(users_output[idx], "To: ");
 	strcat(users_output[idx], mail->to[0]);

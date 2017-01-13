@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -117,13 +118,12 @@ bool init_users();
 int  check_name_psswrd(char* line);
 bool show_inbox();
 bool send_mail(char* to, char* subject, char* text);
-bool server_state_machine(char* input);
+bool server_state_machine(char* input, uint8 i);
 void print_mail(mail_t mail);
-void parse_output(COMMAND cmd, void* args);
-void parse_show_inbox();
+void parse_output(COMMAND cmd, uint8 i, void* args);
+void parse_show_inbox(uint8 idx);
 bool delete_mail(int mail_num);
-void parse_get_mail(uint8* mail_num);
-void parse_show_online_inbox();
+void parse_get_mail(uint8 idx, uint8* mail_num);
 
 /* client function decleration */
 bool client_state_machine(char** input);
