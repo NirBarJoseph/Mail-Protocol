@@ -62,6 +62,8 @@ typedef uint64_t 		uint64;
 #define ALLOC_STRING_BY_SIZE(s,n)	(s)=(char*)malloc((n));\
 									CHECK_ALLOC((s));\
 									memset((s),0,n)
+#define ALLOC_AND_COPY(s,s2)		ALLOC_STRING_COPY(s,s2);\
+									strcpy(s,s2)
 
 #define DEBUGER(n)					printf("HERE%d\n",(n))
 

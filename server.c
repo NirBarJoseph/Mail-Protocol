@@ -40,7 +40,6 @@ int main(int argc, char* args[]){
 	uint8 i, num_waiting_conn = 0;
 	struct sockaddr_in serverAddr, clientAddr;
 	socklen_t addr_size;
-	bool logged;
 	char* welcome_msg = WELCOME_MSG;
 	char* connected_msg = CONNECTED_MSG;
 	char* wrong_cards_msg = WRONG_CREDS_MSG;
@@ -79,8 +78,10 @@ int main(int argc, char* args[]){
 		LOG_ERROR;
 	}
 
-	FD_ZERO(active_fds);
-	FD_SET(welcome_socket, active_fds);
+
+
+	FD_ZERO(&active_fds);
+	FD_SET(welcome_socket, &active_fds);
 	max_fd = welcome_socket;
 
 	while(TRUE){
@@ -99,8 +100,7 @@ int main(int argc, char* args[]){
 		send_with_size(newSocket, welcome_msg);
 
 		/*---- the cradentials loop ----*/
-		logged = FALSE;
-		while (!logged){
+		while (!current_user){
 			/*---- get credentials and validate them ----*/
 			recv_with_size(newSocket, &server_buff);
 			found = check_name_psswrd(server_buff);
@@ -110,7 +110,6 @@ int main(int argc, char* args[]){
 				online_users[found] = newSocket;
 				send_with_size(newSocket, connected_msg);
 				NULLIFY(server_buff);
-				logged = TRUE;
 				num_of_connected_clients++;
 			} else {
 				// if log in request not confirmed we want to issue a "not connected" msg
@@ -126,106 +125,86 @@ int main(int argc, char* args[]){
 
 	        num_read_ready = Select(max_fd + 1, &read_fds, NULL, NULL, NULL);
 
-	        if (FD_ISSET(welcome_socket, &read_fds)) {    /* new client connection */
-	    		addr_size = sizeof(clientAddr);
-	    		/*---- Accept new user ----*/
-	    		printf("before connection!\n");
-	    		newSocket = accept(welcome_socket, (struct sockaddr *)&clientAddr, &addr_size);
-	    		FD_SET(newSocket, active_fds);
-	    		if(newSocket > max_fd){
-	    			max_fd = newSocket;
-	    		}
-	    		printf("got a connection!\n");
+	        i = 0;
+	        while(num_read_ready){
+				/* new client connection */
+	        	if (FD_ISSET(welcome_socket, &read_fds)){
+					addr_size = sizeof(clientAddr);
+					/* Accept new user */
+					printf("before connection!\n");
+					newSocket = accept(welcome_socket,
+							(struct sockaddr *) &clientAddr, &addr_size);
+					 /* add new descriptor to set */
+					FD_SET(newSocket, &active_fds);
+					printf("got a connection!\n");
 
-	            for (i = 0; i < NUM_OF_CLIENTS; i++)
-	                if (waiting_connection[i] < 0) {
-	                	waiting_connection[i] = newSocket; /* save descriptor */
-	                    break;
-	                }
-
-	            FD_SET(newSocket, &active_fds);    /* add new descriptor to set */
-	            if (newSocket > max_fd)
-	                max_fd = newSocket;         /* for select */
-
-	            // one more waiting to connect and less read ready socket
-	            num_waiting_conn++;
-	            num_read_ready--;
-	        }
-
-	        if(num_read_ready){
-	        	// check if sign in waiting sockets are ready
-	        	if(num_waiting_conn){
-	        		for (i = 0; i < num_waiting_conn; i++){
-	        			if(FD_ISSET(waiting_connection[i], &read_fds)){
-	        				/*---- get credentials and validate them ----*/
-	        				recv_with_size(waiting_connection[i], &server_buff);
-	        				found = check_name_psswrd(server_buff);
-	        				if (found != -1){
-	        					// if log in request confirmed we want to issue a "connected" msg
-	        					current_user = &users[found];
-	        					online_users[found] = waiting_connection[i];
-	        					num_waiting_conn--;
-	        					///////////////////////////////TODO
-	        					send_with_size(newSocket, connected_msg);
-	        					//////////////////////////////TODO
-	        					logged = TRUE;
-	        					num_of_connected_clients++;
-	        				}/* else {//TODO
-	        					// if log in request not confirmed we want to issue a "not connected" msg
-	        					send_with_size(newSocket, wrong_cards_msg);
-	        					NULLIFY(server_buff);
-	        				}*///TODO
-	        				// one less read ready socket
-	        	            num_read_ready--;
-        					NULLIFY(server_buff);
-	        			}
-	        		}
-	        	}
-
-	        	// check if there are any more read ready sockets
-	        	if(!num_read_ready){
-	        		break;
-	        	}
-
-	        	// if there are more read ready sockects get the data from them
-
-	        	// check if signed in sockets are ready
-				for (i = 0; i < num_of_users; i++) {
-					if (0) {
-
+					/* update the maximum fd number */
+					if (newSocket > max_fd) {
+						max_fd = newSocket;
 					}
 
-					switch (recv_with_size(newSocket, &server_buff)) {
+					/* we want to update the sockets waiting connection list */
+					for (i = 0; i < NUM_OF_CLIENTS; i++)
+						if (waiting_connection[i] < 0) {
+							waiting_connection[i] = newSocket; /* save descriptor */
+							break;
+						}
+
+					/* one more waiting to connect and less read ready socket */
+					num_waiting_conn++;
+					num_read_ready--;
+	        	} else if(FD_ISSET(waiting_connection[i], &read_fds)){
+    				/* get credentials and validate them */
+    				recv_with_size(waiting_connection[i], &server_buff);
+    				found = check_name_psswrd(server_buff);
+    				if (found != -1){
+    					/* if log in request confirmed we want to issue a "connected" msg */
+    					online_users[found] = waiting_connection[i];
+    					waiting_connection[i] = -1;
+    					ALLOC_And_COPY(users_output[found], connected_msg);
+    					num_of_connected_clients++;
+    					num_waiting_conn--;
+    				}
+    				/* one less read ready socket */
+    	            num_read_ready--;
+					NULLIFY(server_buff);
+
+	        	} else if(FD_ISSET(online_users[i], &read_fds)){
+    				/* get client command and create output for them */
+					switch (recv_with_size(online_users[i], users_output[i])) {
 					case 0:
-						ALLOC_STRING_COPY(server_buff, "QUIT")
-						;
-						strcpy(server_buff, "QUIT");
+						/* caused by SIGTERM in client */
+						/* act as if QUIT command issued */
+						ALLOC_AND_COPY(server_buff, "QUIT");
 						break;
 					case -1:
-						printf("RECIVE FAILED\n");
+						/* receive error handling in main loop */
+						printf("RECEIVE FAILED\n");
 						continue;
 					default:
 						break;
 					}
 
 					server_state_machine(server_buff);
-					if (server_buff) {
-						// if there is no msg back to the user continue and don't try to send an empty msg
-						send_with_size(newSocket, server_buff);
-						NULLIFY(server_buff);
-					}
+					NULLIFY(server_buff);
+	        	}
 
-				}
-			}
+	        	/* on to the next one */
+				i++;
+	        }
+			/*--- end receive loop ---*/
+
+
+			/*--- start send loop ---*/
 
 	        // TODO EMAOHI
 			write_fds = active_fds;
 
-	        nready = Select(maxfd+1, &rset, NULL, NULL, NULL);
+//	        nready = Select(maxfd+1, &rset, NULL, NULL, NULL);
 	        // TODO EMAHOI
+			/*--- end send loop ---*/
 		} while (num_of_connected_clients);
 	}
-//	free(welcome_str);
 	return 0;
 }
 
@@ -289,12 +268,15 @@ bool load(char* path){
 
 
 void free_users(){
-
 //	free(users);
 	return;
 }
 
 bool init_users(){
+	for (int i = 0; i < NUM_OF_CLIENTS; i++){
+		waiting_connection[i] = -1;
+		online_users[i] = -1;
+	}
 	return TRUE;
 }
 
