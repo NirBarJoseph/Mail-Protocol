@@ -8,6 +8,7 @@ uint8   num_of_users = 0;
 uint8	num_of_connected_clients = 0;
 char* 	server_buff		/*= NULL*/;
 char*	users_output[NUM_OF_CLIENTS];
+fd_set active_fds;
 
 
 /*FOR WHITEBOX TESTING ONLY*/
@@ -43,7 +44,7 @@ int main(int argc, char* args[]){
 	char* welcome_msg = WELCOME_MSG;
 	char* connected_msg = CONNECTED_MSG;
 	char* wrong_cards_msg = WRONG_CREDS_MSG;
-	fd_set read_fds, write_fds, active_fds;
+	fd_set read_fds, write_fds;
 
 
 	if(argc < 2){
@@ -100,7 +101,7 @@ int main(int argc, char* args[]){
 		send_with_size(newSocket, welcome_msg);
 
 		/*---- the cradentials loop ----*/
-		while (!current_user){
+		while (!num_of_connected_clients){
 			/*---- get credentials and validate them ----*/
 			recv_with_size(newSocket, &server_buff);
 			found = check_name_psswrd(server_buff);
@@ -199,8 +200,19 @@ int main(int argc, char* args[]){
 
 	        // TODO EMAOHI
 			write_fds = active_fds;
-
-//	        nready = Select(maxfd+1, &rset, NULL, NULL, NULL);
+	        nready = Select(maxfd+1, NULL, &write_fds, NULL, NULL);
+	        /* Service all the sockets with output pending. */
+	        int i;
+	        for (i = 0; i < NUM_OF_CLIENTS; ++i)
+	          if (FD_ISSET (online_users[i], &write_fds))
+	            {
+				  send_with_size(online_users[i], users_output[i]);
+				  NULLIFY(users_output[i]);
+	            }
+	          if (FD_ISSET (waiting_connection[i], &write_fds))
+	            {
+				  send_with_size(waiting_connection[i], wrong_cards_msg);
+	            }
 	        // TODO EMAHOI
 			/*--- end send loop ---*/
 		} while (num_of_connected_clients);
@@ -426,7 +438,7 @@ void print_mail(mail_t mail){
 /*
  * creating the show inbox string and copying it to the server msg buffer
  */
-void parse_show_inbox(){
+void parse_show_inbox(uint8 idx){
 
 	uint32 curr_output_len = 0;
 	uint32 curr_buffer_len = 0;
@@ -437,12 +449,12 @@ void parse_show_inbox(){
 
 
 	if(!current_user){
-		ALLOC_STRING_COPY(server_buff,"No Logged User\n");
-		strcpy(server_buff, "No Logged User\n");
+		ALLOC_STRING_COPY(users_output[idx],"No Logged User\n");
+		strcpy(users_output[idx], "No Logged User\n");
 		return;
 	} else if (!current_user->inbox_size){
-		ALLOC_STRING_COPY(server_buff,"Empty Inbox\n");
-		strcpy(server_buff, "Empty Inbox\n");
+		ALLOC_STRING_COPY(users_output[idx],"Empty Inbox\n");
+		strcpy(users_output[idx], "Empty Inbox\n");
 		return;
 	}
 
@@ -453,16 +465,16 @@ void parse_show_inbox(){
 	curr_buffer_len += BUFFER_SIZE;
 
 	//iterate over the inbox
-	while(i < current_user->inbox_size){
+	while(i < users[idx]->inbox_size){
 
 		//if the message is deleted (all fields are zeroed (no mail with zero recipients)) continue
-		if(!current_user->inbox[i].recipient_number){
+		if(!users[idx]->inbox[i].recipient_number){
 			i++;
 			continue;
 		}
 		//create a string for one msg
 		memset(tmp_str, 0 ,max_tmp_len);
-		parse_mail_show_inbox(current_user->inbox[i], tmp_str, i);
+		parse_mail_show_inbox(users[idx]->inbox[i], tmp_str, i);
 		//if the the function string buffer won't be enough - reallocate it
 		if(curr_buffer_len < curr_output_len + strlen(tmp_str)){
 			curr_buffer_len += BUFFER_SIZE;
@@ -477,13 +489,13 @@ void parse_show_inbox(){
 	//check if the inbox was actually not empty
 	if(!strlen(tmp_buff)){
 		NULLIFY(tmp_buff);
-		ALLOC_STRING_COPY(server_buff,"Empty Inbox\n");
-		strcpy(server_buff, "Empty Inbox\n");
+		ALLOC_STRING_COPY(users_output[idx],"Empty Inbox\n");
+		strcpy(users_output[idx], "Empty Inbox\n");
 		return;
 	}
 	//copy the function buffer to the server buffer
-	ALLOC_STRING_COPY(server_buff,tmp_buff);
-	strcpy(server_buff, tmp_buff);
+	ALLOC_STRING_COPY(users_output[idx],tmp_buff);
+	strcpy(users_output[idx], tmp_buff);
 	NULLIFY(tmp_buff);
 
 }
@@ -491,48 +503,48 @@ void parse_show_inbox(){
 /*
  * creates a string in the format for get_mail command and copies it to the server buffer
  */
-void parse_get_mail(uint8* mail_num){
+void parse_get_mail(uint8 idx, uint8* mail_num){
 
 	//change the mail num to currect one (array counting)
 	mail_t* mail;
 	uint8	i;
 	(*mail_num)--;
 
-	if(!current_user){
-		ALLOC_STRING_COPY(server_buff,"No Logged User\n");
-		strcpy(server_buff, "No Logged User\n");
+	if(!users[idx]){
+		ALLOC_STRING_COPY(users_output[idx],"No Logged User\n");
+		strcpy(users_output[idx], "No Logged User\n");
 		return;
 		// if the mail number requested is bigger then the size of the inbox then it is not existing
-	} else if (current_user->inbox_size <= *mail_num){
-		ALLOC_STRING_COPY(server_buff,"No such mail\n");
-		strcpy(server_buff, "No such mail\n");
+	} else if (users[idx]->inbox_size <= *mail_num){
+		ALLOC_STRING_COPY(users_output[idx],"No such mail\n");
+		strcpy(users_output[idx], "No such mail\n");
 		return;
 		//if the message is deleted (all fields are zeroed (no mail with zero recipients)) continue
-	} else if (!current_user->inbox[*mail_num].recipient_number){
-		ALLOC_STRING_COPY(server_buff,"This mail is deleted\n");
-		strcpy(server_buff, "This mail is deleted\n");
+	} else if (!users[idx]->inbox[*mail_num].recipient_number){
+		ALLOC_STRING_COPY(users_output[idx],"This mail is deleted\n");
+		strcpy(users_output[idx], "This mail is deleted\n");
 		return;
 	}
 
-	server_buff = (char*)malloc(MAX_COMPOSE_MSG);
-	CHECK_ALLOC(server_buff);
-	memset(server_buff, 0, MAX_COMPOSE_MSG);
+	users_output[idx] = (char*)malloc(MAX_COMPOSE_MSG);
+	CHECK_ALLOC(users_output[idx]);
+	memset(users_output[idx], 0, MAX_COMPOSE_MSG);
 
-	mail = &current_user->inbox[*mail_num];
+	mail = &users[idx]->inbox[*mail_num];
 
-	strcat(server_buff, "To: ");
-	strcat(server_buff, mail->to[0]);
+	strcat(users_output[idx], "To: ");
+	strcat(users_output[idx], mail->to[0]);
 	if (mail->recipient_number > 1){
 		for(i = 1; i < mail->recipient_number; i++){
-			strcat(server_buff,",");
-			strcat(server_buff, mail->to[i]);
+			strcat(users_output[idx],",");
+			strcat(users_output[idx], mail->to[i]);
 		}
 	}
-	strcat(server_buff, "\nSubject: ");
-	strcat(server_buff, mail->subject);
-	strcat(server_buff, "\nText: ");
-	strcat(server_buff, mail->text);
-	strcat(server_buff, "\n");
+	strcat(users_output[idx], "\nSubject: ");
+	strcat(users_output[idx], mail->subject);
+	strcat(users_output[idx], "\nText: ");
+	strcat(users_output[idx], mail->text);
+	strcat(users_output[idx], "\n");
 }
 
 
@@ -543,41 +555,41 @@ void parse_show_online_inbox(){
 /*
  * a parse state machine to redirect the msg parsing flow by command
  */
-void parse_output(COMMAND cmd, void* args){
+void parse_output(COMMAND cmd, uint8 i, void* args){
 
-	if(server_buff){
-		NULLIFY(server_buff);
+	if(users_output[i]){
+		NULLIFY(users_output[i]);
 	}
 
 	if(!current_user && cmd != QUIT){
 		//if quit was called - by this point there is no current user
 		//but we still want to delete the server buffer string
-		ALLOC_STRING_COPY(server_buff,NO_LOGGED_USER);
-		strcpy(server_buff, NO_LOGGED_USER);
+		ALLOC_STRING_COPY(users_output[i],NO_LOGGED_USER);
+		strcpy(users_output[i], NO_LOGGED_USER);
 		return;
 	}
 
 	switch(cmd){
 	case SHOW_INBOX:
-		parse_show_inbox();
+		parse_show_inbox(i);
 		break;
 	case GET_MAIL:
-		parse_get_mail((uint8*)args);
+		parse_get_mail(i, (uint8*)args);
 		break;
 	case DELETE_MAIL:
 	case QUIT:
 		break;
 	case COMPOSE:
-		ALLOC_STRING_COPY(server_buff,MAIL_SENT);
-		strcpy(server_buff,MAIL_SENT);
+		ALLOC_STRING_COPY(users_output[i],MAIL_SENT);
+		strcpy(users_output[i],MAIL_SENT);
 		break;
 	case SHOW_ONLINE_USERS:
-		parse_show_online_inbox();
+		parse_show_online_inbox(i);
 		break;
 	case ERROR:
 	case NUM_OF_COMMANDS:
-		ALLOC_STRING_COPY(server_buff,INVALID_CMD);
-		strcpy(server_buff,INVALID_CMD);
+		ALLOC_STRING_COPY(users_output[i],INVALID_CMD);
+		strcpy(users_output[i],INVALID_CMD);
 	}
 }
 
@@ -610,7 +622,7 @@ bool delete_mail(int mail_num){
 /*
  * the server parse command and state machine
  */
-bool server_state_machine(char* input){
+bool server_state_machine(char* input, uint8 i){
 
 	char* cmd, *args, *to, *subject, *text, *garbage = NULL;
 	uint8 num_arg;
@@ -625,26 +637,26 @@ bool server_state_machine(char* input){
 	}
 
 	if(!strcmp(cmd, "SHOW_INBOX")){
-		parse_output(SHOW_INBOX, NULL);
+		parse_output(SHOW_INBOX, i, NULL);
 	} else if(!strcmp(cmd, "GET_MAIL")){
 		if(!args){
-			parse_output(ERROR, NULL);
+			parse_output(ERROR, i, NULL);
 			return FALSE;
 		}
 		num_arg = (uint8) strtol(args, &garbage, 0);
-		parse_output(GET_MAIL, &num_arg);
+		parse_output(GET_MAIL, i, &num_arg);
 	} else if(!strcmp(cmd, "DELETE_MAIL")){
 		if(!args){
-			parse_output(ERROR, NULL);
+			parse_output(ERROR, i, NULL);
 			return FALSE;
 		}
 		num_arg = (uint8) strtol(args, &garbage, 0);
-		parse_output((delete_mail(num_arg)) ? DELETE_MAIL : ERROR, NULL);
+		parse_output((delete_mail(num_arg)) ? DELETE_MAIL : ERROR, i, NULL);
 	} else if(!strcmp(cmd, "QUIT")){
-		online_users[current_user->guid] = -1;
-		current_user = NULL;
+		online_users[i] = -1;
+		FD_CLR (i, &active_fds);
 		num_of_connected_clients--;
-		parse_output(QUIT, NULL);
+		parse_output(QUIT, i, NULL);
 	} else if(!strcmp(cmd, "COMPOSE")){
 		strtok(args, " ");
 		to = strtok(NULL, "\n");
@@ -653,13 +665,13 @@ bool server_state_machine(char* input){
 		strtok(NULL, " ");
 		text = strtok(NULL, "\n");
 		if(!send_mail(to, subject, text)){
-			parse_output(ERROR, NULL);
+			parse_output(ERROR, i, NULL);
 		}
-		parse_output(COMPOSE, NULL);
+		parse_output(COMPOSE, i, NULL);
 	} else if(!strcmp(cmd, "SHOW_ONLINE_USERS")){
 
 	} else {
-		parse_output(ERROR, NULL);
+		parse_output(ERROR, i, NULL);
 		return FALSE;
 	}
 	return TRUE;
