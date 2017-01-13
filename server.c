@@ -7,6 +7,7 @@ int		waiting_connection[NUM_OF_CLIENTS] = {0};
 uint8   num_of_users = 0;
 uint8	num_of_connected_clients = 0;
 char* 	server_buff		/*= NULL*/;
+char*	users_output[NUM_OF_CLIENTS];
 
 
 /*FOR WHITEBOX TESTING ONLY*/
@@ -120,6 +121,7 @@ int main(int argc, char* args[]){
 
 		/*--- the send-receive loop ----*/
 		do{
+			/*--- start receive loop ---*/
 			read_fds = active_fds;
 
 	        num_read_ready = Select(max_fd + 1, &read_fds, NULL, NULL, NULL);
@@ -215,9 +217,12 @@ int main(int argc, char* args[]){
 
 				}
 			}
+
+	        // TODO EMAOHI
 			write_fds = active_fds;
 
 	        nready = Select(maxfd+1, &rset, NULL, NULL, NULL);
+	        // TODO EMAHOI
 		} while (num_of_connected_clients);
 	}
 //	free(welcome_str);
