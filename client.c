@@ -17,9 +17,10 @@ int test_main(int argc, char* args[]){
 
 int main(int argc, char* args[]){
 
-	int clientSocket;
+	int clientSocket, maxfd ;
 	struct sockaddr_in serverAddr;
 	socklen_t addr_size;
+	fd_set read_fds;
 
 	/*---- login variables ----*/
 	bool logged_in = FALSE;
@@ -77,31 +78,43 @@ int main(int argc, char* args[]){
 		}
 	}
 
+	maxfd = (STDIN > clientSocket) ? STDIN : clientSocket + 1;
 	/*---- main logic section ----*/
 	while (TRUE){
 
-		/*---- Get the request from the user and parse with the client_state_machine ----*/
-		NULLIFY(client_buff);
-		client_buff = get_line();
-		client_state_machine(&client_buff);
+		FD_ZERO(&read_fds);
+		FD_SET(clientSocket, &read_fds);
+        FD_SET(STDIN, &read_fds);
+//		FD_SET(STDIN_FILENO, &write_fds);
 
-		/*---- send the data and wait for response ----*/
-		send_with_size(clientSocket, client_buff);
+		select(maxfd, &read_fds, NULL, NULL, NULL);
 
-		/*---- Read the greeting message from the server and display it ----*/
-		if(strstr(client_buff, "DELETE")){
-			// if the cmd is delete we are not suppose to receive a msg back so continue
-			continue;
-		} else if(!strcmp(client_buff, "QUIT")){
-			// if the cmd is quit then we need to break from the infinite loop
-			// so we will close the socket and exit
+		if(FD_ISSET(STDIN, &read_fds)){
+			/*---- Get the request from the user and parse with the client_state_machine ----*/
 			NULLIFY(client_buff);
-			break;
+			client_buff = get_line();
+			client_state_machine(&client_buff);
+
+			/*---- send the data and wait for response ----*/
+			send_with_size(clientSocket, client_buff);
+
+			/*---- Read the greeting message from the server and display it ----*/
+			if(strstr(client_buff, "DELETE")){
+				// if the cmd is delete we are not suppose to receive a msg back so continue
+				continue;
+			} else if(!strcmp(client_buff, "QUIT")){
+				// if the cmd is quit then we need to break from the infinite loop
+				// so we will close the socket and exit
+				NULLIFY(client_buff);
+				break;
+			}
 		}
 
-		// receive a msg back from the server and print it
-		recv_with_size(clientSocket , &client_buff);
-		printf("%s", client_buff);
+		if(FD_ISSET(clientSocket, &read_fds)){
+			// receive a msg back from the server and print it
+			recv_with_size(clientSocket , &client_buff);
+			printf("%s", client_buff);
+		}
 	}
 	close(clientSocket);
 	return 0;

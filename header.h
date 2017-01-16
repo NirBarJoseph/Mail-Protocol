@@ -48,6 +48,7 @@ typedef uint64_t 		uint64;
 #define BUFFER_SIZE					1024
 #define INT_SIZE					4
 #define EXTRA_ARGS					4
+#define STDIN						0
 
 /* Functions Defines */
 #define LOG_ERROR					printf("Critical error (%s) in file: %s, in line: %d\n",\
@@ -85,6 +86,7 @@ typedef enum {
 	QUIT		     ,
 	COMPOSE		   	 ,
 	SHOW_ONLINE_USERS,
+	MSG				 ,
 	ERROR	       	 ,
 	NUM_OF_COMMANDS
 } COMMAND;
@@ -117,13 +119,15 @@ void free_users();
 bool init_users();
 int  check_name_psswrd(char* line);
 bool show_inbox();
-bool send_mail(char* to, char* subject, char* text);
+bool send_mail(char* to, char* subject, char* text, uint8 idx);
 bool server_state_machine(char* input, uint8 i);
 void print_mail(mail_t mail);
 void parse_output(COMMAND cmd, uint8 i, void* args);
 void parse_show_inbox(uint8 idx);
-bool delete_mail(int mail_num);
+bool delete_mail(int mail_num, uint8 idx);
 void parse_get_mail(uint8 idx, uint8* mail_num);
+void parse_show_online_inbox(uint8 idx);
+bool send_chat_msg(uint8 idx, char* to, char* text);
 
 /* client function decleration */
 bool client_state_machine(char** input);
