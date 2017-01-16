@@ -176,8 +176,7 @@ int main(int argc, char* args[]) {
 					case 0:
 						/* caused by SIGTERM in client */
 						/* act as if QUIT command issued */
-						ALLOC_AND_COPY(server_buff, "QUIT")
-						;
+						ALLOC_AND_COPY(server_buff, "QUIT");
 						break;
 					case -1:
 						/* receive error handling in main loop */
@@ -708,8 +707,9 @@ bool server_state_machine(char* input, uint8 i) {
 		num_arg = (uint8) strtol(args, &garbage, 0);
 		parse_output((delete_mail(num_arg, i)) ? DELETE_MAIL : ERROR, i, NULL);
 	} else if (!strcmp(cmd, "QUIT")) {
+		FD_CLR(online_users[i], &active_fds);
+		close(online_users[i]);
 		online_users[i] = -1;
-		FD_CLR(i, &active_fds);
 		num_of_connected_clients--;
 		parse_output(QUIT, i, NULL);
 	} else if (!strcmp(cmd, "COMPOSE")) {

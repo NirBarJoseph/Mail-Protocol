@@ -44,11 +44,15 @@ int main(int argc, char* args[]){
 
 	/*---- Connect the socket to the server using the address struct ----*/
 	addr_size = sizeof serverAddr;
-	connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
+	int a = connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
+	if(a){
+		LOG_ERROR;
+	}
+	DEBUGER(a);
 
 	/*---- get the greeting message and display it ----*/
-	recv_with_size(clientSocket , &client_buff);
-	if(client_buff){
+	DEBUGER(-1);
+	if(recv_with_size(clientSocket , &client_buff) >= 0){
 		printf("%s\n", client_buff);
 		NULLIFY(client_buff);
 	} else {
@@ -58,6 +62,7 @@ int main(int argc, char* args[]){
 	/*---- login section ----*/
 	while(!logged_in){
 		//get the name and password by the format given from the user input
+		DEBUGER(00);
 		memset(credentials, 0, sizeof(credentials));
 		memset(username, 0, sizeof(username));
 		memset(psswrd, 0, sizeof(psswrd));
@@ -68,9 +73,11 @@ int main(int argc, char* args[]){
 		strcat(credentials, psswrd);
 
 		//send it to the server
+		DEBUGER(01);
 		send_with_size(clientSocket, credentials);
 
 		/*---- get the connected/not message ----*/
+		DEBUGER(02);
 		recv_with_size(clientSocket , &client_buff);
 		printf("%s", client_buff);
 		if (!strcmp(client_buff, CONNECTED_MSG)){
@@ -85,7 +92,6 @@ int main(int argc, char* args[]){
 		FD_ZERO(&read_fds);
 		FD_SET(clientSocket, &read_fds);
         FD_SET(STDIN, &read_fds);
-//		FD_SET(STDIN_FILENO, &write_fds);
 
 		select(maxfd, &read_fds, NULL, NULL, NULL);
 
@@ -106,6 +112,7 @@ int main(int argc, char* args[]){
 				// if the cmd is quit then we need to break from the infinite loop
 				// so we will close the socket and exit
 				NULLIFY(client_buff);
+				FD_ZERO(&read_fds);
 				break;
 			}
 		}
@@ -116,7 +123,9 @@ int main(int argc, char* args[]){
 			printf("%s", client_buff);
 		}
 	}
+	DEBUGER(10);
 	close(clientSocket);
+	DEBUGER(10);
 	return 0;
 }
 
